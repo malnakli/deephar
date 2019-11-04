@@ -24,3 +24,5 @@ lib
 
 # Backup files
 *.bkp
+
+.vscode

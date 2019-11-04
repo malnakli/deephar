@@ -31,9 +31,11 @@ The model trained on MPII data reached 91.2% on the test set using multi-crop
 and horizontal flipping data augmentation, and 89.1% on the validation set,
 single-crop.
 To reproduce results on validation, do:
+
+```bash
+  python exp/mpii/eval_mpii_singleperson.py output/eval-mpii
 ```
-  python3 exp/mpii/eval_mpii_singleperson.py output/eval-mpii
-```
+
 The output will be stored in `output/eval-mpii/log.txt`.
 
 ### 3D pose estimation on Human3.6M
@@ -55,8 +57,9 @@ For 2D action recognition, the pose estimation model was trained on mixed
 data from MPII and PennAction, and the full model for action recognition was
 trained and fine-tuned on PennAction only.
 To reproduce our scores, do:
-```
-  python3 exp/pennaction/eval_penn_ar_pe_merge.py output/eval-penn
+
+```bash
+  python exp/pennaction/eval_penn_ar_pe_merge.py output/eval-penn
 ```
 
 ### 3D action recognition on NTU
@@ -88,3 +91,10 @@ useful for you.
 
 MIT License
 
+## Commands
+
+### CC
+
+```bash
+ salloc --account=def-jiayuan --gres=gpu:1 --cpus-per-task=8 --mem=18000M --time=45:00
+```

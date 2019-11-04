@@ -26,11 +26,11 @@ import annothelper
 
 annothelper.check_pennaction_dataset()
 
+# Update the path base on your location
+dataset_path = '/Volumes/Mo/'
+
 weights_file = 'weights_AR_merge_ep074_26-10-17.h5'
-TF_WEIGHTS_PATH = \
-        'https://github.com/dluvizon/deephar/releases/download/v0.3/' \
-        + weights_file
-md5_hash = 'f53f89257077616a79a6c1cd1702d50f'
+weights_path = f"{dataset_path}datasets/PennAction/{weights_file}"
 
 logdir = './'
 if len(sys.argv) > 1:
@@ -57,12 +57,11 @@ model = action.build_merge_model(model_pe, num_actions, input_shape,
         full_trainable=False)
 
 """Load pre-trained model."""
-weights_path = get_file(weights_file, TF_WEIGHTS_PATH, md5_hash=md5_hash,
-        cache_subdir='models')
+# weights_path = get_file(weights_file, TF_WEIGHTS_PATH, md5_hash=md5_hash, cache_subdir='models')
 model.load_weights(weights_path)
 
 """Load PennAction dataset."""
-penn_seq = PennAction('datasets/PennAction', pennaction_dataconf,
+penn_seq = PennAction(f"{dataset_path}datasets/PennAction", pennaction_dataconf,
         poselayout=pa16j2d, topology='sequences', use_gt_bbox=use_bbox,
         clip_size=num_frames)
 
@@ -72,5 +71,5 @@ penn_te = BatchLoader(penn_seq, ['frame'], ['pennaction'], TEST_MODE,
 
 printcn(OKGREEN, 'Evaluation on PennAction multi-clip using predicted bboxes')
 eval_multiclip_dataset(model, penn_seq,
-        bboxes_file='datasets/PennAction/penn_pred_bboxes_16f.json',
+        bboxes_file=f"{dataset_path}datasets/PennAction/penn_pred_bboxes_16f.json",
         logdir=logdir)

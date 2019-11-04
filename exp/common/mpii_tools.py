@@ -83,6 +83,9 @@ def eval_singleperson_pckh(model, fval, pval, afmat_val, headsize_val,
         num_blocks -= 1
         inputs.append(win)
 
+    # to fix AttributeError: 'Model' object has no attribute 'stateful_metric_names' 
+    # https://github.com/keras-team/keras/issues/9394
+    model.compile('sgd','mse')
     pred = model.predict(inputs, batch_size=batch_size, verbose=1)
     if win is not None:
         del pred[0]

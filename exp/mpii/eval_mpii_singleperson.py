@@ -26,11 +26,12 @@ import annothelper
 
 annothelper.check_mpii_dataset()
 
+
+# Update the path base on your location
+dataset_path = '/Volumes/Mo/'
+
 weights_file = 'weights_PE_MPII_cvpr18_19-09-2017.h5'
-TF_WEIGHTS_PATH = \
-        'https://github.com/dluvizon/deephar/releases/download/v0.1/' \
-        + weights_file
-md5_hash = 'd6b85ba4b8a3fc9d05c8ad73f763d999'
+weights_path = f"{dataset_path}datasets/MPII/{weights_file}"
 
 logdir = './'
 if len(sys.argv) > 1:
@@ -49,8 +50,7 @@ model = reception.build(input_shape, num_joints, dim=2,
         concat_pose_confidence=False)
 
 """Load pre-trained model."""
-weights_path = get_file(weights_file, TF_WEIGHTS_PATH, md5_hash=md5_hash,
-        cache_subdir='models')
+# weights_path = get_file(weights_file, TF_WEIGHTS_PATH, md5_hash=md5_hash, cache_subdir='models')
 model.load_weights(weights_path)
 
 """Merge pose and visibility as a single output."""
@@ -61,7 +61,7 @@ for b in range(int(len(model.outputs) / 2)):
 model = Model(model.input, outputs, name=model.name)
 
 """Load the MPII dataset."""
-mpii = MpiiSinglePerson('datasets/MPII', dataconf=mpii_sp_dataconf)
+mpii = MpiiSinglePerson(f"{dataset_path}datasets/MPII", dataconf=mpii_sp_dataconf)
 
 """Pre-load validation samples and generate the eval. callback."""
 mpii_val = BatchLoader(mpii, x_dictkeys=['frame'],
