@@ -64,7 +64,7 @@ class ActivateConv2dBatch(nn.Module):
     https://github.com/Cadene/pretrained-models.pytorch/blob/master/pretrainedmodels/models/inceptionv4.py
     """
 
-    def __init__(self, in_channels, out_channels, kernel_size, stride, padding=0):
+    def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0):
         super().__init__()
         self.relu = nn.ReLU(inplace=True)
 
@@ -110,9 +110,6 @@ class SeparableConv2d(nn.Module):
 
 
 class ActivateSeparableConv2dBatch(nn.Module):
-    """
-    https://github.com/Cadene/pretrained-models.pytorch/blob/master/pretrainedmodels/models/xception.py#L50
-    """
 
     def __init__(self, in_channels, out_channels, kernel_size=1, stride=1, padding=0, bias=False):
         super().__init__()
@@ -135,21 +132,24 @@ class ActivateSeparableConv2dBatch(nn.Module):
 
 
 class SeparableResidualModule(nn.Module):
-    """
-    https://github.com/Cadene/pretrained-models.pytorch/blob/master/pretrainedmodels/models/xception.py#L50
-    """
 
-    def __init__(self, in_channels, out_channels):
+    def __init__(self, in_channels, out_channels, kernel_size=3, padding=0):
         super().__init__()
+
+        self.in_channels = in_channels
+        self.out_channels = out_channels
 
         self.conv1 = ActivateConv2dBatch(
             in_channels, out_channels, kernel_size=1, stride=1)
 
         self.conv2 = ActivateSeparableConv2dBatch(
-            in_channels, out_channels, kernel_size=3, padding=1)
+            in_channels, out_channels, kernel_size=kernel_size, padding=padding)
 
     def forward(self, x):
-        x1 = self.conv1(x)
+        if self.in_channels == self.out_channels:
+            x1 = x
+        else:
+            x1 = self.conv1(x)
         x2 = self.conv2(x)
         x = torch.add(x1, x2)
         return x

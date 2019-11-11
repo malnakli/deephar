@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from .helper import (
-    conv2d_out_shape, Conv2dBatchActivate, Conv2dBatch, ActivateConv2dBatch, SeparableResidualModule)
+    conv2d_out_shape, Conv2dBatchActivate, Conv2dBatch, ActivateConv2dBatch, SeparableResidualModule, ActivateSeparableConv2dBatch)
 
 
 class MultitaskStemNet(nn.Module):
@@ -55,7 +55,7 @@ class MultitaskStemNet(nn.Module):
         self.layer8_b = nn.MaxPool2d(kernel_size=2, stride=2, padding=0)
 
         self.layer9 = SeparableResidualModule(
-            in_channels=384, out_channels=576)
+            in_channels=384, out_channels=576, kernel_size=3, padding=1)
 
     def forward(self, x):
         x = self.layer0(x)
@@ -82,7 +82,76 @@ class MultitaskStemNet(nn.Module):
     #     return num_features
 
 
-net = MultitaskStemNet()
-x = torch.ones([1, 3, 256, 256])
+class PredictionBlockPS(nn.Module):
+    """
+     Prediction block is implemented as multi-resolution CNN for Pose Estimation
+    """
+
+    def __init__(self, Nj=16, Nd=16):
+        super().__init__()
+        self.layer0_b = nn.MaxPool2d(kernel_size=2, stride=2, padding=0)
+        self.layer1_b = ActivateConv2dBatch(
+            in_channels=576, out_channels=288, kernel_size=1)
+        self.layer2_b = SeparableResidualModule(
+            in_channels=288, out_channels=288, kernel_size=5, padding=2)
+
+        self.layer3_c = nn.MaxPool2d(kernel_size=2, stride=2, padding=0)
+        self.layer4_c = SeparableResidualModule(
+            in_channels=288, out_channels=288, kernel_size=5, padding=2)
+
+        self.layer5_a = SeparableResidualModule(
+            in_channels=576, out_channels=576, kernel_size=5, padding=2)
+        self.layer5_b = SeparableResidualModule(
+            in_channels=288, out_channels=288, kernel_size=5, padding=2)
+        self.layer5_c = SeparableResidualModule(
+            in_channels=288, out_channels=288, kernel_size=5, padding=2)
+
+        self.layer6_c = SeparableResidualModule(
+            in_channels=288, out_channels=288, kernel_size=5, padding=2)
+        self.layer7_c = nn.Upsample(scale_factor=2)
+        self.layer8_b = SeparableResidualModule(
+            in_channels=288, out_channels=576, kernel_size=5, padding=2)
+        self.layer9_b = nn.Upsample(scale_factor=2)
+        self.layer10 = ActivateSeparableConv2dBatch(
+            in_channels=576, out_channels=576, kernel_size=5, padding=2)
+        self.layer11 = nn.Sequential(
+            nn.ReLU(inplace=True),
+            nn.Conv2d(
+                in_channels=576,
+                out_channels=Nd*Nj,
+                kernel_size=1,
+                stride=1,
+                padding=0,
+                bias=False,
+            )
+
+        )
+        self.layer12 = ActivateConv2dBatch(
+            in_channels=Nd*Nj, out_channels=576, kernel_size=1)
+
+    def forward(self, x):
+        x_b = self.layer0_b(x)
+        x_b = self.layer1_b(x_b)
+        x_b = self.layer2_b(x_b)
+        x_c = self.layer3_c(x_b)
+        x_c = self.layer4_c(x_c)
+        x_a = self.layer5_a(x)
+        x_b = self.layer5_b(x_b)
+        x_c = self.layer5_c(x_c)
+        x_c = self.layer6_c(x_c)
+        x_c = self.layer7_c(x_c)
+        x_b = torch.add(x_b, x_c)
+        x_b = self.layer8_b(x_b)
+        x_b = self.layer9_b(x_b)
+        x_a = torch.add(x_a, x_b)
+        x1 = self.layer10(x_a)
+        x2 = self.layer11(x1)
+        x3 = self.layer12(x2)
+        x = torch.add(torch.add(x_a, x1), x3)
+        return x
+
+
+net = PredictionBlockPS()
+x = torch.ones([1, 576, 32, 32])
 print(net(x).shape)
 #print(conv2d_out_shape(64, 64, nn.Conv2d(96, 96, (2, 2), 2, (0, 0))))
