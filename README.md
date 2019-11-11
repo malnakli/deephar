@@ -1,12 +1,14 @@
 # Deep Human Action Recognition
 
+> Pytorch implementation of the deephar.
+
 This software is provided as a supplementary material for our CVPR'18 paper:
+
 > 2D/3D Pose Estimation and Action Recognition using Multitask Deep Learning
 
 ![Predictions](images/preds.png)
 
 A demonstration video can be seen [here](https://www.youtube.com/watch?v=MNEZACbFA4Y&t=6s).
-
 
 ## Warning! This is a WIP!
 
@@ -14,11 +16,9 @@ During the next few days I will be uploading code and weights corresponding
 to our CVPR paper, which will be tagged appropriately. Meanwhile, I will still
 make changes in that code.
 
-
 ## How to install
 
 Please refer to the [installation guide](INSTALL.md).
-
 
 ## Evaluation
 
@@ -43,9 +43,11 @@ The output will be stored in `output/eval-mpii/log.txt`.
 This model was trained using MPII and Human3.6M data.
 Evaluation on Human3.6M is performed on the validation set.
 To reproduce our results, do:
+
 ```
   python3 exp/h36m/eval_h36m.py output/eval-h36m
 ```
+
 The mean per joint position error is 55.1 mm on single crop.
 Note that some scores on individual activities differ from reported results
 on the paper. That is because for the paper we computed scores using one frame
@@ -68,15 +70,16 @@ For 3D action recognition, the pose estimation model was trained on mixed
 data from MPII, Human3.6 and NTU, and the full model for action recognition was
 trained and fine-tuned on NTU only.
 To reproduce our scores, do:
+
 ```
   python3 exp/ntu/eval_ntu_ar_pe_merge.py
 ```
-
 
 ## Citing
 
 Please cite our paper if this software (or any part of it) or weights are
 useful for you.
+
 ```
 @InProceedings{Luvizon_2018_CVPR,
   author = {Luvizon, Diogo C. and Picard, David and Tabia, Hedi},
