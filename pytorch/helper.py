@@ -90,20 +90,6 @@ class ActivateConv2dBatch(nn.Module):
         return x
 
 
-class Concatenate(nn.Module):
-    """
-    https://github.com/Cadene/pretrained-models.pytorch/blob/master/pretrainedmodels/models/inceptionv4.py
-    """
-
-    def __init__(self, tensors):
-        super().__init__()
-        self.tensors = tensors
-
-    def forward(self, x):
-        x = torch.cat([t(x) for t in self.tensors])
-        return x
-
-
 class SeparableConv2d(nn.Module):
     """
     https://github.com/Cadene/pretrained-models.pytorch/blob/master/pretrainedmodels/models/xception.py#L50
@@ -145,6 +131,27 @@ class ActivateSeparableConv2dBatch(nn.Module):
         x = self.relu(x)
         x = self.conv(x)
         x = self.bn(x)
+        return x
+
+
+class SeparableResidualModule(nn.Module):
+    """
+    https://github.com/Cadene/pretrained-models.pytorch/blob/master/pretrainedmodels/models/xception.py#L50
+    """
+
+    def __init__(self, in_channels, out_channels):
+        super().__init__()
+
+        self.conv1 = ActivateConv2dBatch(
+            in_channels, out_channels, kernel_size=1, stride=1)
+
+        self.conv2 = ActivateSeparableConv2dBatch(
+            in_channels, out_channels, kernel_size=3, padding=1)
+
+    def forward(self, x):
+        x1 = self.conv1(x)
+        x2 = self.conv2(x)
+        x = torch.add(x1, x2)
         return x
 
 
