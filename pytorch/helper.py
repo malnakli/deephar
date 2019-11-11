@@ -10,7 +10,7 @@ class Conv2dBatchActivate(nn.Module):
     """
 
     def __init__(self, in_channels, out_channels, kernel_size, stride, padding=0):
-        super(Conv2dBatchActivate, self).__init__()
+        super().__init__()
         self.conv = nn.Conv2d(
             in_channels,
             out_channels,
@@ -37,7 +37,7 @@ class Conv2dBatchActivate(nn.Module):
 class Conv2dBatch(nn.Module):
 
     def __init__(self, in_channels, out_channels, kernel_size, stride, padding=0):
-        super(Conv2dBatch, self).__init__()
+        super().__init__()
         self.conv = nn.Conv2d(
             in_channels,
             out_channels,
@@ -65,7 +65,9 @@ class ActivateConv2dBatch(nn.Module):
     """
 
     def __init__(self, in_channels, out_channels, kernel_size, stride, padding=0):
-        super(ActivateConv2dBatch, self).__init__()
+        super().__init__()
+        self.relu = nn.ReLU(inplace=True)
+
         self.conv = nn.Conv2d(
             in_channels,
             out_channels,
@@ -80,7 +82,6 @@ class ActivateConv2dBatch(nn.Module):
             momentum=0.1,  # default pytorch value
             affine=True,
         )
-        self.relu = nn.ReLU(inplace=True)
 
     def forward(self, x):
         x = self.relu(x)
@@ -95,11 +96,55 @@ class Concatenate(nn.Module):
     """
 
     def __init__(self, tensors):
-        super(Concatenate, self).__init__()
+        super().__init__()
         self.tensors = tensors
 
     def forward(self, x):
         x = torch.cat([t(x) for t in self.tensors])
+        return x
+
+
+class SeparableConv2d(nn.Module):
+    """
+    https://github.com/Cadene/pretrained-models.pytorch/blob/master/pretrainedmodels/models/xception.py#L50
+    """
+
+    def __init__(self, in_channels, out_channels, kernel_size=1, stride=1, padding=0, dilation=1, bias=False):
+        super().__init__()
+
+        self.conv1 = nn.Conv2d(in_channels, in_channels, kernel_size,
+                               stride, padding, dilation, groups=in_channels, bias=bias)
+        self.pointwise = nn.Conv2d(
+            in_channels, out_channels, 1, 1, 0, 1, 1, bias=bias)
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.pointwise(x)
+        return x
+
+
+class ActivateSeparableConv2dBatch(nn.Module):
+    """
+    https://github.com/Cadene/pretrained-models.pytorch/blob/master/pretrainedmodels/models/xception.py#L50
+    """
+
+    def __init__(self, in_channels, out_channels, kernel_size=1, stride=1, padding=0, bias=False):
+        super().__init__()
+
+        self.relu = nn.ReLU(inplace=True)
+        self.conv = SeparableConv2d(
+            in_channels, out_channels, kernel_size, stride, padding, bias=bias)
+        self.bn = nn.BatchNorm2d(
+            out_channels,
+            eps=0.001,  # value found in tensorflow
+            momentum=0.1,  # default pytorch value
+            affine=True,
+        )
+
+    def forward(self, x):
+        x = self.relu(x)
+        x = self.conv(x)
+        x = self.bn(x)
         return x
 
 

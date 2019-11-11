@@ -1,7 +1,7 @@
-import torch  # pylint(unused-import)
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from .torch_utils import (
+from .helper import (
     conv2d_out_shape, Conv2dBatchActivate, Conv2dBatch, ActivateConv2dBatch, Concatenate)
 
 
