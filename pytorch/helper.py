@@ -101,7 +101,9 @@ class SeparableConv2d(nn.Module):
         self.conv1 = nn.Conv2d(in_channels, in_channels, kernel_size,
                                stride, padding, dilation, groups=in_channels, bias=bias)
         self.pointwise = nn.Conv2d(
-            in_channels, out_channels, 1, 1, 0, 1, 1, bias=bias)
+            in_channels, out_channels, kernel_size=1, stride=1, padding=0, dilation=1, groups=1, bias=bias)
+
+        self.weights = [self.conv1.weight, self.pointwise.weight]
 
     def forward(self, x):
         x = self.conv1(x)
@@ -153,6 +155,91 @@ class SeparableResidualModule(nn.Module):
         x2 = self.conv2(x)
         x = torch.add(x1, x2)
         return x
+
+
+class Lambda(nn.Module):
+
+    def __init__(self, lambd):
+        super().__init__()
+        self.lambd = lambd
+
+    def forward(self, x):
+        return self.lambd(x)
+
+
+class SoftArgMax2d(nn.Module):
+
+    def __init__(self, in_channels, out_channels, kernel_size=1, stride=1, padding=0):
+        super().__init__()
+
+        self.num_rows = kernel_size if isinstance(
+            kernel_size, int) else kernel_size[0]
+
+        self.num_cols = kernel_size if isinstance(
+            kernel_size, int) else kernel_size[1]
+
+        self.num_filters = out_channels
+        self.in_channels = in_channels
+        self.stride = stride
+        self.padding = padding
+
+    def forward(self, x):
+        x = self._softmax(x)
+
+        x_x = self._lin_interpolation_2d(x, dim=0)
+        x_y = self._lin_interpolation_2d(x, dim=1)
+
+        x = torch.cat([x_x, x_y], dim=-1)
+        return x
+
+    def _softmax(self, x):
+        if x.ndim != 4:
+            raise ValueError('This function is specific for 4D tensors. '
+                             'Here, ndim=' + str(x.ndim))
+
+        e = torch.exp(x - torch.max(x, dim=(1, 2), keepdim=True))
+        s = torch.sum(e, dim=(1, 2), keepdim=True)
+        return e / s
+
+    def _lin_interpolation_2d(self, x, dim):
+
+        conv = SeparableConv2d(
+            self.in_channels, self.num_filters, (self.num_rows, self.num_cols), self.stride, self.padding, bias=False)
+        x = conv(x)
+
+        ws = conv.weights
+        for w in ws:
+            w.data = torch.zeros(w.shape)
+
+        linspace = self._linspace_2d(self.num_rows, self.num_cols, dim=dim)
+
+        for i in range(self.num_filters):
+            ws[0].data[:, :, i, 0] = linspace[:, :]
+            ws[1].data[0, 0, i, i] = 1.
+
+        for p in self.conv1.parameters():
+            p.requires_grad = False
+
+        x = Lambda(lambda x: torch.squeeze(x, dim=1))(x)
+        x = Lambda(lambda x: torch.squeeze(x, dim=1))(x)
+        # dim 0 becasue the channel is first in pytorch.
+        x = Lambda(lambda x: torch.unsqueeze(x, dim=0))(x)
+        return x
+
+    def _linspace_2d(self, nb_rols, nb_cols, dim=0):
+
+        def _lin_sp_aux(size, nb_repeat, start, end):
+            linsp = torch.linspace(start=start, end=end, num=size)
+            x = torch.empty((nb_repeat, size), dtype=torch.float32)
+
+            for d in range(nb_repeat):
+                x[d] = linsp
+
+            return x
+
+        if dim == 1:
+            return (_lin_sp_aux(nb_rols, nb_cols, 0.0, 1.0)).T
+        return _lin_sp_aux(nb_cols, nb_rols, 0.0, 1.0)
 
 
 def conv2d_out_shape(width, height, Conv2d):

@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from .helper import (
-    conv2d_out_shape, Conv2dBatchActivate, Conv2dBatch, ActivateConv2dBatch, SeparableResidualModule, ActivateSeparableConv2dBatch)
+    conv2d_out_shape, Conv2dBatchActivate, Conv2dBatch, ActivateConv2dBatch, SeparableResidualModule, ActivateSeparableConv2dBatch, SoftArgMax2d)
 
 
 class MultitaskStemNet(nn.Module):
@@ -87,7 +87,7 @@ class PredictionBlockPS(nn.Module):
      Prediction block is implemented as multi-resolution CNN for Pose Estimation
     """
 
-    def __init__(self, Nj=16, Nd=16):
+    def __init__(self, num_context_per_joint=2, Nj=16, Nd=16):
         super().__init__()
         self.layer0_b = nn.MaxPool2d(kernel_size=2, stride=2, padding=0)
         self.layer1_b = ActivateConv2dBatch(
@@ -114,6 +114,7 @@ class PredictionBlockPS(nn.Module):
         self.layer9_b = nn.Upsample(scale_factor=2)
         self.layer10 = ActivateSeparableConv2dBatch(
             in_channels=576, out_channels=576, kernel_size=5, padding=2)
+        # heatmap
         self.layer11 = nn.Sequential(
             nn.ReLU(inplace=True),
             nn.Conv2d(
@@ -126,6 +127,14 @@ class PredictionBlockPS(nn.Module):
             )
 
         )
+        self.sam_s_model = SoftArgMax2d(
+            in_channels=Nj, out_channels=Nj, kernel_size=(32, 32))
+
+        _num_heatmaps = (num_context_per_joint + 1) * Nj
+
+        self.sam_c_model = SoftArgMax2d(
+            in_channels=_num_heatmaps, out_channels=_num_heatmaps, kernel_size=(32, 32))
+
         self.layer12 = ActivateConv2dBatch(
             in_channels=Nd*Nj, out_channels=576, kernel_size=1)
 
