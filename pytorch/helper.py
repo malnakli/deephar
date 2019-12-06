@@ -221,18 +221,18 @@ class SoftArgMax2d(nn.Module):
                 "This function is specific for 4D tensors. " "Here, ndim=" + str(x.ndim)
             )
 
-        e = torch.exp(x - torch.max(x, dim=(1, 2), keepdim=True))
+        e = torch.exp(x - _torch_max_dims(x, dims=[2, 3], keepdim=True))
         s = torch.sum(e, dim=(1, 2), keepdim=True)
         return e / s
 
     def _lin_interpolation_2d(self, x, dim):
 
         conv = SeparableConv2d(
-            self.in_channels,
-            self.num_filters,
-            (self.num_rows, self.num_cols),
-            self.stride,
-            self.padding,
+            in_channels=self.in_channels,
+            out_channels=self.num_filters,
+            kernel_size=(self.num_rows, self.num_cols),
+            stride=1,
+            padding=0,
             bias=False,
         )
         x = conv(x)
@@ -244,21 +244,20 @@ class SoftArgMax2d(nn.Module):
         linspace = self._linspace_2d(self.num_rows, self.num_cols, dim=dim)
 
         for i in range(self.num_filters):
-            ws[0].data[:, :, i, 0] = linspace[:, :]
-            ws[1].data[0, 0, i, i] = 1.0
+            ws[0].data[i, 0, :, :] = linspace[:, :]
+            ws[1].data[i, i, 0, 0] = 1.0
 
-        for p in self.conv1.parameters():
-            p.requires_grad = False
+        for _p in conv.parameters():
+            _p.requires_grad = False
 
-        x = Lambda(lambda x: torch.squeeze(x, dim=1))(x)
-        x = Lambda(lambda x: torch.squeeze(x, dim=1))(x)
-        # dim 0 becasue the channel is first in pytorch.
-        x = Lambda(lambda x: torch.unsqueeze(x, dim=0))(x)
+        x = Lambda(lambda x: torch.squeeze(x, dim=-1))(x)
+        x = Lambda(lambda x: torch.squeeze(x, dim=-1))(x)
+        x = Lambda(lambda x: torch.unsqueeze(x, dim=-1))(x)
         return x
 
     def _linspace_2d(self, nb_rols, nb_cols, dim=0):
         def _lin_sp_aux(size, nb_repeat, start, end):
-            linsp = torch.linspace(start=start, end=end, num=size)
+            linsp = torch.linspace(start=start, end=end, steps=size)
             x = torch.empty((nb_repeat, size), dtype=torch.float32)
 
             for d in range(nb_repeat):
@@ -282,10 +281,9 @@ class BuildJointsProbability(nn.Module):
         x = self.max(x)
         x = self.act(x)
 
-        x = Lambda(lambda x: torch.squeeze(x, dim=1))(x)
-        x = Lambda(lambda x: torch.squeeze(x, dim=1))(x)
-        # dim 0 becasue the channel is first in pytorch.
-        x = Lambda(lambda x: torch.unsqueeze(x, axis=0))(x)
+        x = Lambda(lambda x: torch.squeeze(x, dim=-1))(x)
+        x = Lambda(lambda x: torch.squeeze(x, dim=-1))(x)
+        x = Lambda(lambda x: torch.unsqueeze(x, axis=-1))(x)
         return x
 
 
@@ -323,7 +321,7 @@ class BuildContextAggregation(nn.Module):
         mul_alpha = Lambda(lambda x: self.alpha * x)
         mul_1alpha = Lambda(lambda x: (1 - self.alpha) * x)
 
-        tf_div = Lambda(lambda x: torch.divide(x[0], x[1]))
+        tf_div = Lambda(lambda x: torch.div(x[0], x[1]))
 
         pxi = torch.mul(xi, pc)
         pyi = torch.mul(yi, pc)
@@ -334,12 +332,12 @@ class BuildContextAggregation(nn.Module):
 
         pxi_div = tf_div([pxi_sum, pc_sum])
         pyi_div = tf_div([pyi_sum, pc_sum])
-        yc_div = torch.cat([pxi_div, pyi_div])
+        yc_div = torch.cat([pxi_div, pyi_div], dim=-1)
 
         ys_alpha = mul_alpha(ys)
         yc_div_1alpha = mul_1alpha(yc_div)
 
-        y = torch.add([ys_alpha, yc_div_1alpha])
+        y = torch.add(ys_alpha, yc_div_1alpha)
 
         return y
 
@@ -355,18 +353,16 @@ class BuildContextAggregation(nn.Module):
                 self.act = nn.Sigmoid()
 
             def forward(self, x):
-                # dim 0 becasue the channel is first in pytorch.
-                x = Lambda(lambda x: torch.squeeze(x, dim=0))(x)
+
+                x = Lambda(lambda x: torch.squeeze(x, dim=-1))(x)
                 x = self.fc(x)
-                x = Lambda(lambda x: torch.unsqueeze(x, dim=0))(x)
+                x = Lambda(lambda x: torch.unsqueeze(x, dim=-1))(x)
 
                 _w = self.fc.weight
                 _w.data = torch.zeros(_w.shape)  # w[0].fill(0)
 
                 for j in range(self.num_joints):
-                    _w.data[0][
-                        j * self.num_context : (j + 1) * self.num_context, j
-                    ] = 1.0
+                    _w.data[j, j * self.num_context : (j + 1) * self.num_context] = 1.0
 
                 # d.trainable = False
                 for _p in self.fc.parameters():
@@ -438,13 +434,21 @@ class BuildReceptionBlock(nn.Module):
         return x
 
 
+def pose_regression_2d(h, sam_s_model, jprob_s_model):
+
+    pose = sam_s_model(h)
+    visible = jprob_s_model(h)
+
+    return pose, visible, h
+
+
 def pose_regression_2d_context(
     h, num_joints, sam_s_model, sam_c_model, jprob_c_model, agg_model, jprob_s_model
 ):
 
     # Split heatmaps for specialized and contextual information
-    hs = Lambda(lambda x: x[:, :, :, :num_joints])(h)
-    hc = Lambda(lambda x: x[:, :, :, num_joints:])(h)
+    hs = Lambda(lambda x: x[:, :num_joints, :, :])(h)
+    hc = Lambda(lambda x: x[:, num_joints:, :, :])(h)
 
     # Soft-argmax and joint probability for each heatmap
     ps = sam_s_model(hs)
@@ -494,3 +498,9 @@ def conv2d_out_shape(width, height, Conv2d):
     )
 
     return (Conv2d.out_channels, _w, _h)
+
+
+def _torch_max_dims(x, dims=[0, 1], keepdim=False):
+    for dim in dims:
+        x = torch.max(x, dim=dim, keepdim=keepdim)[0]
+    return x

@@ -11,6 +11,7 @@ from .helper import (
     BuildContextAggregation,
     BuildReceptionBlock,
     pose_regression_2d_context,
+    pose_regression_2d,
 )
 
 
@@ -114,6 +115,7 @@ class PredictionBlockPS(nn.Module):
         kernel_size=(5, 5),
         export_heatmaps=False,
         concat_pose_confidence=True,
+        dim=2,
     ):
         super().__init__()
 
@@ -121,25 +123,41 @@ class PredictionBlockPS(nn.Module):
         self.kernel_size = kernel_size
         self.concat_pose_confidence = concat_pose_confidence
         self.export_heatmaps = export_heatmaps
+        self.num_joints = Nj
+        self.dim = dim
+        self.num_context_per_joint = num_context_per_joint
 
         self.layer10 = ActivateSeparableConv2dBatch(
             in_channels=576, out_channels=576, kernel_size=self.kernel_size, padding=2
         )
 
         self.sam_s_model = SoftArgMax2d(
-            in_channels=Nj, out_channels=Nj, kernel_size=(32, 32)
+            in_channels=self.num_joints,
+            out_channels=self.num_joints,
+            kernel_size=(32, 32),
         )
         self.jprob_s_model = BuildJointsProbability(kernel_size=(32, 32), padding=0)
 
-        _num_heatmaps = (num_context_per_joint + 1) * Nj
+        num_context_per_joint = (
+            2 if num_context_per_joint is None else num_context_per_joint
+        )
+        _num_heatmaps = (num_context_per_joint + 1) * self.num_joints
+
+        if self.dim == 3:
+            _num_heatmaps = Nd * self.num_joints
 
         self.sam_c_model = SoftArgMax2d(
-            in_channels=_num_heatmaps, out_channels=_num_heatmaps, kernel_size=(32, 32)
+            in_channels=_num_heatmaps - self.num_joints,
+            out_channels=_num_heatmaps - self.num_joints,
+            kernel_size=(32, 32),
         )
         self.jprob_c_model = BuildJointsProbability(kernel_size=(32, 32), padding=0)
 
         self.agg_model = BuildContextAggregation(
-            in_features=1, alpha=0.8, num_joints=Nj, num_context=num_context_per_joint
+            in_features=self.num_joints * num_context_per_joint,
+            alpha=0.8,
+            num_joints=self.num_joints,
+            num_context=num_context_per_joint,
         )
 
         # heatmap
@@ -147,7 +165,7 @@ class PredictionBlockPS(nn.Module):
             nn.ReLU(inplace=True),
             nn.Conv2d(
                 in_channels=576,
-                out_channels=Nd * Nj,
+                out_channels=_num_heatmaps,
                 kernel_size=1,
                 stride=1,
                 padding=0,
@@ -156,10 +174,13 @@ class PredictionBlockPS(nn.Module):
         )
 
         self.layer12 = ActivateConv2dBatch(
-            in_channels=Nd * Nj, out_channels=576, kernel_size=1
+            in_channels=_num_heatmaps, out_channels=576, kernel_size=1
         )
 
     def forward(self, x):
+        import pdb
+
+        pdb.set_trace()
         outputs = []
         for block in range(self.num_blocks):
             x = BuildReceptionBlock(self.kernel_size)(x)
@@ -168,18 +189,24 @@ class PredictionBlockPS(nn.Module):
             x = self.layer10(x)
             h = self.layer11(x)
 
-            pose, visible, hm = pose_regression_2d_context(
-                h,
-                self.num_joints,
-                self.sam_s_model,
-                self.sam_c_model,
-                self.jprob_c_model,
-                self.agg_model,
-                self.jprob_s_model,
-            )
+            if self.dim == 2:
+                if self.num_context_per_joint is not None:
+                    pose, visible, hm = pose_regression_2d_context(
+                        h,
+                        self.num_joints,
+                        self.sam_s_model,
+                        self.sam_c_model,
+                        self.jprob_c_model,
+                        self.agg_model,
+                        self.jprob_s_model,
+                    )
+                else:
+                    pose, visible, hm = pose_regression_2d(
+                        h, self.sam_s_model, self.jprob_s_model
+                    )
 
             if self.concat_pose_confidence:
-                outputs.append(torch.cat([pose, visible]))
+                outputs.append(torch.cat([pose, visible], dim=-1))
             else:
                 outputs.append(pose)
                 outputs.append(visible)
