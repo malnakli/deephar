@@ -1,17 +1,20 @@
+import pdb
+
 import torch
 import torch.nn as nn
+
 from .helper import (
-    Conv2dBatchActivate,
-    Conv2dBatch,
     ActivateConv2dBatch,
-    SeparableResidualModule,
     ActivateSeparableConv2dBatch,
-    SoftArgMax2d,
-    BuildJointsProbability,
     BuildContextAggregation,
+    BuildJointsProbability,
     BuildReceptionBlock,
-    pose_regression_2d_context,
+    Conv2dBatch,
+    Conv2dBatchActivate,
+    SeparableResidualModule,
+    SoftArgMax2d,
     pose_regression_2d,
+    pose_regression_2d_context,
 )
 
 
@@ -178,7 +181,6 @@ class PredictionBlockPS(nn.Module):
         )
 
     def forward(self, x):
-        import pdb
 
         pdb.set_trace()
         outputs = []
@@ -218,7 +220,7 @@ class PredictionBlockPS(nn.Module):
                 h = self.layer12(h)
                 x = torch.add(torch.add(ident_map, x), h)
 
-        return torch.tensor(outputs)
+        return torch.stack(outputs)
 
 
 net = PredictionBlockPS()
