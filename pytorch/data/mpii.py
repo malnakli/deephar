@@ -2,6 +2,7 @@ import os
 
 import numpy as np
 import scipy.io as sio
+import torch
 from PIL import Image
 from torch.utils.data import Dataset
 
@@ -22,9 +23,11 @@ class MpiiSinglePerson(Dataset):
         self,
         dataset_path,
         dataconf,
+        y_dictkeys,
         poselayout=pa16j2d,
         mode=TRAIN_MODE,
         remove_outer_joints=True,
+        num_predictions=1,
         transform=None,
     ):
 
@@ -32,7 +35,10 @@ class MpiiSinglePerson(Dataset):
         self.dataconf = dataconf
         self.poselayout = poselayout
         self.mode = mode
+        self.y_dictkeys = y_dictkeys
+        self.num_predictions = len(self.y_dictkeys) * [num_predictions]
         self.remove_outer_joints = remove_outer_joints
+        self.transform = transform
         self.load_annotations(os.path.join(dataset_path, "annotations.mat"))
 
     def load_annotations(self, filename):
@@ -129,9 +135,9 @@ class MpiiSinglePerson(Dataset):
         return 0.6 * np.linalg.norm(head[0:2] - head[2:4])
 
     def __len__(self):
-        return len(self.images)
+        return len(self.samples[self.mode])
 
-    def __getitem__(self, key):
+    def __getitem__(self, idx):
         output = {}
 
         if self.mode == TRAIN_MODE:
@@ -139,8 +145,8 @@ class MpiiSinglePerson(Dataset):
         else:
             dconf = self.dataconf.get_fixed_config()
 
-        imgt = self._load_image(key, self.mode)
-        annot = self.samples[self.mode][key]
+        imgt = self._load_image(idx, self.mode)
+        annot = self.samples[self.mode][idx]
 
         scale = 1.25 * annot["scale"]
         objpos = np.array([annot["objpos"][0], annot["objpos"][1] + 12 * scale])
@@ -156,9 +162,7 @@ class MpiiSinglePerson(Dataset):
             imgt.horizontal_flip()
 
         imgt.normalize_affinemap()
-        output["frame"] = normalize_channels(
-            imgt.asarray(), channel_power=dconf["chpower"]
-        )
+        X = normalize_channels(imgt.asarray(), channel_power=dconf["chpower"])
 
         _p = np.empty((self.poselayout.num_joints, self.poselayout.dim))
         _p[:] = np.nan
@@ -180,4 +184,16 @@ class MpiiSinglePerson(Dataset):
         output["headsize"] = self._calc_head_size(annot["head"])
         output["afmat"] = imgt.afmat.copy()
 
-        return output
+        y_batch = []
+        for i, dkey in enumerate(self.y_dictkeys):
+            for _ in range(self.num_predictions[i]):
+                y_batch.append(output[dkey])
+
+        if self.transform is not None:
+            X = self.transform(X)
+
+        if self.mode == TRAIN_MODE:
+            y_batch = torch.from_numpy(y_batch[0])
+
+        return X, y_batch
+
