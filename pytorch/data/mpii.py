@@ -180,7 +180,7 @@ class MpiiSinglePerson(Dataset):
         if self.remove_outer_joints:
             _p[(_v == 0)[:, 0], :] = -1e9
 
-        output["pose"] = np.concatenate((_p, _v), axis=-1)
+        output["pose"] = np.concatenate((_p, _v), axis=-1).astype(np.float32)
         output["headsize"] = self._calc_head_size(annot["head"])
         output["afmat"] = imgt.afmat.copy()
 
@@ -193,7 +193,7 @@ class MpiiSinglePerson(Dataset):
             X = self.transform(X)
 
         if self.mode == TRAIN_MODE:
-            y_batch = torch.from_numpy(y_batch[0])
+            y_batch = torch.from_numpy(np.array(y_batch))
 
         return X, y_batch
 

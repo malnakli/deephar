@@ -182,7 +182,6 @@ class PredictionBlockPS(nn.Module):
 
     def forward(self, x):
 
-        pdb.set_trace()
         outputs = []
         for block in range(self.num_blocks):
             x = BuildReceptionBlock(self.kernel_size)(x)
@@ -220,10 +219,13 @@ class PredictionBlockPS(nn.Module):
                 h = self.layer12(h)
                 x = torch.add(torch.add(ident_map, x), h)
 
-        return torch.stack(outputs)
+        return torch.stack(outputs).transpose(0, 1)
 
 
-net = PredictionBlockPS()
-x = torch.ones([1, 576, 32, 32])
-print(net(x).shape)
-# print(conv2d_out_shape(64, 64, nn.Conv2d(96, 96, (2, 2), 2, (0, 0))))
+# stem = MultitaskStemNet()
+# net = PredictionBlockPS()
+# x = torch.ones([1, 3, 256, 256])
+# # print(net(x).shape)
+
+# pdb.set_trace()
+# # print(conv2d_out_shape(64, 64, nn.Conv2d(96, 96, (2, 2), 2, (0, 0))))

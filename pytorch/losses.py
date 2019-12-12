@@ -4,6 +4,9 @@ import torch.nn as nn
 
 def pose_regression_loss(pose_loss, visibility_weight):
     def _pose_regression_loss(y_true, y_pred):
+        import pdb
+
+        pdb.set_trace()
         video_clip = y_true.ndim == 4
         if video_clip:
             """The model was time-distributed, so there is one additional
@@ -30,7 +33,7 @@ def pose_regression_loss(pose_loss, visibility_weight):
         else:
             raise Exception("Invalid pose_loss option ({})".format(pose_loss))
 
-        vloss = nn.BCELoss()(v_true, v_pred).item()
+        vloss = nn.BCEWithLogitsLoss()(v_pred, v_true).item()
 
         if video_clip:
             """If time-distributed, average the error on video frames."""
@@ -71,7 +74,7 @@ def elasticnet_bincross_loss_on_valid_joints(y_true, y_pred):
 
     _l1 = torch.abs(y_pred - y_true)
     _l2 = torch.sqrt(y_pred - y_true)
-    _bc = 0.01 * nn.BCELoss()(y_true, y_pred).item()
+    _bc = 0.01 * nn.BCEWithLogitsLoss()(y_pred, y_true).item()
     dummy = 0.0 * y_pred
     # NOTE: make sure you change the dim
     return (
