@@ -193,7 +193,7 @@ class MpiiSinglePerson(Dataset):
             X = self.transform(X)
 
         if self.mode == TRAIN_MODE:
-            y_batch = torch.from_numpy(np.array(y_batch))
+            y_batch = torch.from_numpy(np.array(output[dkey]))
 
         return X, y_batch
 

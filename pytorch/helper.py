@@ -1,4 +1,5 @@
 import math
+import pdb
 
 import torch
 import torch.nn as nn
@@ -25,7 +26,7 @@ class Conv2dBatchActivate(nn.Module):
             momentum=0.1,  # default pytorch value
             affine=True,
         )
-        self.relu = nn.ReLU(inplace=True)
+        self.relu = nn.ReLU()
 
     def forward(self, x):
         x = self.conv(x)
@@ -65,7 +66,7 @@ class ActivateConv2dBatch(nn.Module):
 
     def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0):
         super().__init__()
-        self.relu = nn.ReLU(inplace=True)
+        self.relu = nn.ReLU()
 
         self.conv = nn.Conv2d(
             in_channels,
@@ -141,7 +142,7 @@ class ActivateSeparableConv2dBatch(nn.Module):
     ):
         super().__init__()
 
-        self.relu = nn.ReLU(inplace=True)
+        self.relu = nn.ReLU()
         self.conv = SeparableConv2d(
             in_channels, out_channels, kernel_size, stride, padding, bias=bias
         )
@@ -445,7 +446,6 @@ def pose_regression_2d(h, sam_s_model, jprob_s_model):
 def pose_regression_2d_context(
     h, num_joints, sam_s_model, sam_c_model, jprob_c_model, agg_model, jprob_s_model
 ):
-
     # Split heatmaps for specialized and contextual information
     hs = Lambda(lambda x: x[:, :num_joints, :, :])(h)
     hc = Lambda(lambda x: x[:, num_joints:, :, :])(h)
