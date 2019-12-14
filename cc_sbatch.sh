@@ -7,12 +7,16 @@
 #SBATCH --cpus-per-task=4
 #SBATCH --gres=gpu:1              # Number of GPUs (per node)
 
-module load python/3.6
-virtualenv --no-download ~/ENVS/tensorflow
-source  ~/ENVS/tensorflow/bin/activate
+module load python/3.7
+module load scipy-stack
+virtualenv --no-download ~/ENVS/pytorch
+source  ~/ENVS/pytorch/bin/activate
 
 pip install --no-index --upgrade pip
 pip install --no-index -r requirements.txt
+# install pytorch-lightning 
+pip install --no-index  https://github.com/williamFalcon/test-tube/archive/0.7.5.zip
+pip install --no-index  https://github.com/williamFalcon/pytorch-lightning/archive/master.zip
 
 # wget https://files.pythonhosted.org/packages/86/45/a273fe3f8fe931a11da34fba1cb74013cfc70dcf93e5d8d329c951dc44c5/Keras-2.1.4-py2.py3-none-any.whl
 pip install Keras-2.1.4-py2.py3-none-any.whl 
