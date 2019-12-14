@@ -25,11 +25,19 @@ class MPII(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         # REQUIRED
         x, y = batch
-        y_hat = self.forward(x)
+        y_hats = self.forward(x)
         loss_f = pose_regression_loss("l1l2bincross", 0.01)
-        loss = loss_f(y, y_hat)
+        loss = 0
+        for _y in y_hats:
+            loss += loss_f(y[0], _y)
         tensorboard_logs = {"train_loss": loss}
         return {"loss": loss, "log": tensorboard_logs}
+
+    # def validation_step(self, batch, batch_idx):
+    #     # OPTIONAL
+    #     x, y = batch
+    #     y_hat = self.forward(x)
+    #     return {"val_loss": F.cross_entropy(y_hat, y)}
 
     def configure_optimizers(self):
         # REQUIRED
@@ -50,7 +58,7 @@ class MPII(pl.LightningModule):
                 transform=transforms.ToTensor(),
             ),
             batch_size=32,
-            shuffle=False,
+            shuffle=True,
         )
 
     # @pl.data_loader
@@ -62,6 +70,7 @@ class MPII(pl.LightningModule):
     #             dataconf=mpii_sp_dataconf,
     #             y_dictkeys=["pose", "afmat", "headsize"],
     #             mode=2,
+    #             transform=transforms.ToTensor(),
     #         ),
     #         batch_size=32,
     #         shuffle=False,

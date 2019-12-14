@@ -185,15 +185,11 @@ class MpiiSinglePerson(Dataset):
         output["afmat"] = imgt.afmat.copy()
 
         y_batch = []
-        for i, dkey in enumerate(self.y_dictkeys):
-            for _ in range(self.num_predictions[i]):
-                y_batch.append(output[dkey])
+        for dkey in self.y_dictkeys:
+            y_batch.append(output[dkey])
 
         if self.transform is not None:
             X = self.transform(X)
-
-        if self.mode == TRAIN_MODE:
-            y_batch = torch.from_numpy(np.array(output[dkey]))
 
         return X, y_batch
 

@@ -219,7 +219,7 @@ class PredictionBlockPS(nn.Module):
                 h = self.layer12(h)
                 x = torch.add(torch.add(ident_map, x), h)
 
-        return outputs[-1]  # torch.stack(outputs).transpose(0, 1)
+        return outputs
 
 
 # stem = MultitaskStemNet()
