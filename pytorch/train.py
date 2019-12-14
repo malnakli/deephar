@@ -3,7 +3,7 @@ import torch
 from torch.utils.data import DataLoader
 import os
 from .data import MpiiSinglePerson
-from .losses import pose_regression_loss
+from .losses import train, valid
 from .models import MultitaskStemNet, PredictionBlockPS
 from .config import mpii_sp_dataconf
 from torchvision import transforms
@@ -25,19 +25,27 @@ class MPII(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         # REQUIRED
         x, y = batch
+        y = y[0]
         y_hats = self.forward(x)
-        loss_f = pose_regression_loss("l1l2bincross", 0.01)
-        loss = 0
-        for _y in y_hats:
-            loss += loss_f(y[0], _y)
+        loss_f = train.pose_regression_loss("l1l2bincross", 0.01)
+        loss = loss_f(y, y_hats[0])
+        for i, _y in enumerate(y_hats):
+            if i == 0:
+                continue
+            loss += loss_f(y, _y)
         tensorboard_logs = {"train_loss": loss}
         return {"loss": loss, "log": tensorboard_logs}
 
-    # def validation_step(self, batch, batch_idx):
-    #     # OPTIONAL
-    #     x, y = batch
-    #     y_hat = self.forward(x)
-    #     return {"val_loss": F.cross_entropy(y_hat, y)}
+    def validation_step(self, batch, batch_idx):
+        # OPTIONAL
+        x, y = batch
+
+        pval, afmat_val, headsize_val = y
+
+        score = valid.eval_singleperson_pckh(
+            self, x, pval[:, :, 0:2], afmat_val, headsize_val, pred_per_block=1
+        )
+        return {"val_score": score}
 
     def configure_optimizers(self):
         # REQUIRED
@@ -61,18 +69,18 @@ class MPII(pl.LightningModule):
             shuffle=True,
         )
 
-    # @pl.data_loader
-    # def val_dataloader(self):
-    #     # OPTIONAL
-    #     return DataLoader(
-    #         MpiiSinglePerson(
-    #             dataset_path=self.data_path,
-    #             dataconf=mpii_sp_dataconf,
-    #             y_dictkeys=["pose", "afmat", "headsize"],
-    #             mode=2,
-    #             transform=transforms.ToTensor(),
-    #         ),
-    #         batch_size=32,
-    #         shuffle=False,
-    #     )
+    @pl.data_loader
+    def val_dataloader(self):
+        # OPTIONAL
+        return DataLoader(
+            MpiiSinglePerson(
+                dataset_path=self.data_path,
+                dataconf=mpii_sp_dataconf,
+                y_dictkeys=["pose", "afmat", "headsize"],
+                mode=2,
+                transform=transforms.ToTensor(),
+            ),
+            batch_size=2,
+            shuffle=False,
+        )
 
