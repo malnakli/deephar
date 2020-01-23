@@ -130,6 +130,7 @@ class PredictionBlockPS(nn.Module):
         self.dim = dim
         self.num_context_per_joint = num_context_per_joint
 
+        self.recep_block  = BuildReceptionBlock(self.kernel_size)
         self.layer10 = ActivateSeparableConv2dBatch(
             in_channels=576, out_channels=576, kernel_size=self.kernel_size, padding=2
         )
@@ -184,7 +185,7 @@ class PredictionBlockPS(nn.Module):
 
         outputs = []
         for block in range(self.num_blocks):
-            x = BuildReceptionBlock(self.kernel_size)(x)
+            x = self.recep_block(x)
             ident_map = x
 
             x = self.layer10(x)

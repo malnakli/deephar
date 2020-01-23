@@ -10,7 +10,7 @@ from torchvision import transforms
 
 
 class MPII(pl.LightningModule):
-    def __init__(self, data_path=os.getcwd()):
+    def __init__(self, data_path=os.getcwd(),device='cpu'):
         super().__init__()
         # not the best model...
         self.stem = MultitaskStemNet()
@@ -65,7 +65,7 @@ class MPII(pl.LightningModule):
                 mode=1,
                 transform=transforms.ToTensor(),
             ),
-            batch_size=32,
+            batch_size=16,
             shuffle=True,
         )
 
@@ -80,7 +80,7 @@ class MPII(pl.LightningModule):
                 mode=2,
                 transform=transforms.ToTensor(),
             ),
-            batch_size=2,
+            batch_size=32,
             shuffle=False,
         )
 

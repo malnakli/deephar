@@ -4,6 +4,8 @@ from ..data.measures import pckh, pckh_per_joint
 from ..data.utils import pa16j2d
 
 
+from ..utils import tensor_to_numpy
+
 def eval_singleperson_pckh(
     model,
     fval,
@@ -16,9 +18,9 @@ def eval_singleperson_pckh(
     verbose=1,
 ):
 
-    afmat_val = afmat_val.numpy()
-    pval = pval.numpy()
-    headsize_val = headsize_val.numpy()
+    afmat_val = tensor_to_numpy(afmat_val)
+    pval = tensor_to_numpy(pval)
+    headsize_val = tensor_to_numpy(headsize_val)
 
     input_shape = fval.shape
     if len(input_shape) == 5:
@@ -66,8 +68,8 @@ def eval_singleperson_pckh(
 
         if map_to_pa16j is not None:
             y_pred = y_pred[:, map_to_pa16j, :]
-
-        y_pred = transform_pose_sequence(A.copy(), y_pred, inverse=True)
+  
+        y_pred = transform_pose_sequence(A.copy(), tensor_to_numpy(y_pred), inverse=True)
         s = pckh(y_true, y_pred, headsize_val, refp=refp)
         if verbose:
             print(" %.1f" % (100 * s))

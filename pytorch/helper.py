@@ -193,25 +193,77 @@ class Lambda(nn.Module):
     def forward(self, x):
         return self.lambd(x)
 
+class _LinInterpolation2d(nn.Module):
+    def __init__(self, in_channels,num_filters,num_rows,num_cols,dim):
+        super().__init__()
+
+        self.num_rows=num_rows
+        self.num_cols=num_cols
+        self.dim = dim
+        self.num_filters = num_filters
+        
+        self.conv = SeparableConv2d(
+                in_channels=in_channels,
+                out_channels=num_filters,
+                kernel_size=(num_rows, num_cols),
+                stride=1,
+                padding=0,
+                bias=False,
+            )
+
+
+    def forward(self, x):
+        x = self.conv(x)
+
+        ws = self.conv.weights
+
+        for w in ws:
+            w.data = torch.zeros(w.shape).cuda() # update
+
+        linspace = self._linspace_2d(self.num_rows, self.num_cols, dim=self.dim)
+
+        for i in range(self.num_filters):
+            ws[0].data[i, 0, :, :] = linspace[:, :]
+            ws[1].data[i, i, 0, 0] = 1.0
+
+        for _p in self.conv.parameters():
+            _p.requires_grad = False
+
+        x = Lambda(lambda x: torch.squeeze(x, dim=-1))(x)
+        x = Lambda(lambda x: torch.squeeze(x, dim=-1))(x)
+        x = Lambda(lambda x: torch.unsqueeze(x, dim=-1))(x)
+        return x
+    
+    def _linspace_2d(self, nb_rols, nb_cols, dim=0):
+        def _lin_sp_aux(size, nb_repeat, start, end):
+            linsp = torch.linspace(start=start, end=end, steps=size)
+            x = torch.empty((nb_repeat, size), dtype=torch.float32)
+
+            for d in range(nb_repeat):
+                x[d] = linsp
+
+            return x
+
+        if dim == 1:
+            return (_lin_sp_aux(nb_rols, nb_cols, 0.0, 1.0)).T
+        return _lin_sp_aux(nb_cols, nb_rols, 0.0, 1.0)
 
 class SoftArgMax2d(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=1, stride=1, padding=0):
         super().__init__()
 
-        self.num_rows = kernel_size if isinstance(kernel_size, int) else kernel_size[0]
+        _num_rows = kernel_size if isinstance(kernel_size, int) else kernel_size[0]
 
-        self.num_cols = kernel_size if isinstance(kernel_size, int) else kernel_size[1]
+        _num_cols = kernel_size if isinstance(kernel_size, int) else kernel_size[1]
 
-        self.num_filters = out_channels
-        self.in_channels = in_channels
-        self.stride = stride
-        self.padding = padding
+        self.dim0 = _LinInterpolation2d(in_channels,out_channels,_num_rows,_num_cols,0)  
+        self.dim1 = _LinInterpolation2d(in_channels,out_channels,_num_rows,_num_cols,1)
 
     def forward(self, x):
         x = self._softmax(x)
 
-        x_x = self._lin_interpolation_2d(x, dim=0)
-        x_y = self._lin_interpolation_2d(x, dim=1)
+        x_x = self.dim0(x)
+        x_y = self.dim1(x)
 
         x = torch.cat([x_x, x_y], dim=-1)
         return x
@@ -226,49 +278,6 @@ class SoftArgMax2d(nn.Module):
         s = torch.sum(e, dim=(1, 2), keepdim=True)
         return e / s
 
-    def _lin_interpolation_2d(self, x, dim):
-
-        conv = SeparableConv2d(
-            in_channels=self.in_channels,
-            out_channels=self.num_filters,
-            kernel_size=(self.num_rows, self.num_cols),
-            stride=1,
-            padding=0,
-            bias=False,
-        )
-        x = conv(x)
-
-        ws = conv.weights
-        for w in ws:
-            w.data = torch.zeros(w.shape)
-
-        linspace = self._linspace_2d(self.num_rows, self.num_cols, dim=dim)
-
-        for i in range(self.num_filters):
-            ws[0].data[i, 0, :, :] = linspace[:, :]
-            ws[1].data[i, i, 0, 0] = 1.0
-
-        for _p in conv.parameters():
-            _p.requires_grad = False
-
-        x = Lambda(lambda x: torch.squeeze(x, dim=-1))(x)
-        x = Lambda(lambda x: torch.squeeze(x, dim=-1))(x)
-        x = Lambda(lambda x: torch.unsqueeze(x, dim=-1))(x)
-        return x
-
-    def _linspace_2d(self, nb_rols, nb_cols, dim=0):
-        def _lin_sp_aux(size, nb_repeat, start, end):
-            linsp = torch.linspace(start=start, end=end, steps=size)
-            x = torch.empty((nb_repeat, size), dtype=torch.float32)
-
-            for d in range(nb_repeat):
-                x[d] = linsp
-
-            return x
-
-        if dim == 1:
-            return (_lin_sp_aux(nb_rols, nb_cols, 0.0, 1.0)).T
-        return _lin_sp_aux(nb_cols, nb_rols, 0.0, 1.0)
 
 
 class BuildJointsProbability(nn.Module):
@@ -297,6 +306,24 @@ class BuildContextAggregation(nn.Module):
         self.in_features = in_features
         self.alpha = alpha
         self.num_context = num_context
+
+        ## init 
+        self._ctx1 = _Ctx(
+            in_features=self.in_features,
+            num_joints=self.num_joints,
+            num_context=self.num_context,
+        )
+        self._ctx2 = _Ctx(
+            in_features=self.in_features,
+            num_joints=self.num_joints,
+            num_context=self.num_context,
+        )
+        self._ctx3 = _Ctx(
+            in_features=self.in_features,
+            num_joints=self.num_joints,
+            num_context=self.num_context,
+        )
+
 
     def forward(self, ys, yc, pc):
 
@@ -327,9 +354,9 @@ class BuildContextAggregation(nn.Module):
         pxi = torch.mul(xi, pc)
         pyi = torch.mul(yi, pc)
 
-        pc_sum = self._ctx_sum(pc, self.num_frames)
-        pxi_sum = self._ctx_sum(pxi, self.num_frames)
-        pyi_sum = self._ctx_sum(pyi, self.num_frames)
+        pc_sum = self._ctx1(pc) # self._ctx_sum(pc, self.num_frames)
+        pxi_sum = self._ctx2(pxi) # self._ctx_sum(pxi, self.num_frames)
+        pyi_sum = self._ctx3(pyi) # self._ctx_sum(pyi, self.num_frames)
 
         pxi_div = tf_div([pxi_sum, pc_sum])
         pyi_div = tf_div([pyi_sum, pc_sum])
@@ -343,34 +370,7 @@ class BuildContextAggregation(nn.Module):
         return y
 
     def _ctx_sum(self, inp, num_frames=1):
-        class _Ctx(nn.Module):
-            def __init__(self, in_features, num_joints=16, num_context=1):
-                super().__init__()
-
-                self.num_joints = num_joints
-                self.num_context = num_context
-
-                self.fc = nn.Linear(in_features, self.num_joints, bias=False)
-                self.act = nn.Sigmoid()
-
-            def forward(self, x):
-
-                x = Lambda(lambda x: torch.squeeze(x, dim=-1))(x)
-                x = self.fc(x)
-                x = Lambda(lambda x: torch.unsqueeze(x, dim=-1))(x)
-
-                _w = self.fc.weight
-                _w.data = torch.zeros(_w.shape)  # w[0].fill(0)
-
-                for j in range(self.num_joints):
-                    _w.data[j, j * self.num_context : (j + 1) * self.num_context] = 1.0
-
-                # d.trainable = False
-                for _p in self.fc.parameters():
-                    _p.requires_grad = False
-
-                return x
-
+        
         if num_frames > 1:
             raise NotImplementedError
 
@@ -380,7 +380,38 @@ class BuildContextAggregation(nn.Module):
             num_context=self.num_context,
         )(inp)
 
+class _Ctx(nn.Module):
+    def __init__(self, in_features, num_joints=16, num_context=1):
+        super().__init__()
 
+        self.num_joints = num_joints
+        self.num_context = num_context
+
+        self.fc = nn.Linear(in_features, self.num_joints, bias=False)
+        self.act = nn.Sigmoid()
+
+    def forward(self, x):
+
+        x = Lambda(lambda x: torch.squeeze(x, dim=-1))(x)
+        x = self.fc(x)
+        x = Lambda(lambda x: torch.unsqueeze(x, dim=-1))(x)
+
+        _w = self.fc.weight
+        if torch.cuda.is_available():
+            _w.data = torch.zeros(_w.shape).cuda()  # w[0].fill(0)
+        else:
+            _w.data = torch.zeros(_w.shape)
+
+        for j in range(self.num_joints):
+            _w.data[j, j * self.num_context : (j + 1) * self.num_context] = 1.0
+
+        # d.trainable = False
+        for _p in self.fc.parameters():
+            _p.requires_grad = False
+
+        return x
+
+        
 class BuildReceptionBlock(nn.Module):
     def __init__(self, kernel_size):
         super().__init__()
